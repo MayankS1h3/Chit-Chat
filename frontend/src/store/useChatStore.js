@@ -37,9 +37,15 @@ export const useChatStore = create((set, get) => ({
     const { selectedUser, messages } = get();
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: [...messages, res.data] });
+      // Avoid pushing duplicate _id (e.g., accidental multi-submit)
+      set((state) => {
+        if (state.messages.some((m) => m._id === res.data._id)) return state;
+        return { messages: [...state.messages, res.data] };
+      });
     } catch (error) {
-      toast.error(error.response.data.message);
+      // Handle both backend { error: "..." } and { message: "..." }
+      const msg = error?.response?.data?.message || error?.response?.data?.error || "Failed to send message";
+      toast.error(msg);
     }
   },
 
@@ -52,9 +58,9 @@ export const useChatStore = create((set, get) => ({
     socket.on("newMessage", (newMessage) => {
       const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
       if (!isMessageSentFromSelectedUser) return;
-
-      set({
-        messages: [...get().messages, newMessage],
+      set((state) => {
+        if (state.messages.some((m) => m._id === newMessage._id)) return state; // dedupe
+        return { messages: [...state.messages, newMessage] };
       });
     });
   },
